@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>TikFeed</title>
+<style>
+  /* ── tokens ─────────────────────────────────────────────────────────────── */
+  :root {
+    --bg:       #0a0a0a;
+    --surface:  #111;
+    --pill:     rgba(255,255,255,.1);
+    --pill-act: rgba(255,255,255,.22);
+    --text:     #f0f0f0;
+    --muted:    rgba(255,255,255,.45);
+    --accent:   #fe2c55;    /* TikTok red-pink */
+    --accent2:  #25f4ee;    /* TikTok cyan */
+    --radius:   14px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bot: env(safe-area-inset-bottom, 0px);
+    color-scheme: dark;
+    box-sizing: border-box;
+  }
+  *, *::before, *::after { box-sizing: inherit; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── layout ─────────────────────────────────────────────────────────────── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: var(--safe-top);
+    padding-bottom: var(--safe-bot);
+  }
+
+  /* ── top bar ─────────────────────────────────────────────────────────────── */
+  #topbar {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px 10px;
+    background: linear-gradient(to bottom, var(--bg) 70%, transparent);
+  }
+
+  .top-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  #logo {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    flex-shrink: 0;
+  }
+
+  #search-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: var(--pill);
+    border-radius: 999px;
+    padding: 0 14px;
+    gap: 8px;
+  }
+  #search-wrap svg { flex-shrink: 0; opacity: .5; }
+  #searchInput {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-size: 14px;
+    padding: 8px 0;
+  }
+  #searchInput::placeholder { color: var(--muted); }
+
+  #searchBtn {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 7px 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity .15s;
+  }
+  #searchBtn:hover { opacity: .85; }
+
+  /* pill tabs */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    white-space: nowrap;
+    background: var(--pill);
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 999px;
+    padding: 6px 16px;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    flex-shrink: 0;
+  }
+  .tab.active, .tab:hover {
+    background: var(--pill-act);
+    color: var(--text);
+  }
+  .tab.active { color: var(--accent2); font-weight: 600; }
+
+  /* ── worker url banner ───────────────────────────────────────────────────── */
+  #workerBanner {
+    background: #1a1a2e;
+    border: 1px solid rgba(37,244,238,.25);
+    border-radius: 10px;
+    margin: 0 16px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #workerBanner strong { color: var(--accent2); }
+  #workerBanner input {
+    width: 100%;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 7px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    outline: none;
+  }
+  #workerBanner input::placeholder { color: var(--muted); }
+  #saveWorker {
+    align-self: flex-end;
+    background: var(--accent2);
+    color: #000;
+    border: none;
+    border-radius: 7px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  #saveWorker:hover { opacity: .85; }
+
+  /* ── feed ────────────────────────────────────────────────────────────────── */
+  #feed {
+    flex: 1;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  #feed::-webkit-scrollbar { display: none; }
+
+  /* ── card ────────────────────────────────────────────────────────────────── */
+  .card {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .card video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  /* thumbnail while video loads */
+  .card .thumb {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    transition: opacity .3s;
+  }
+  .card.playing .thumb { opacity: 0; pointer-events: none; }
+
+  /* gradient overlay */
+  .card .overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to top,
+      rgba(0,0,0,.75) 0%,
+      rgba(0,0,0,.2) 40%,
+      transparent 70%
+    );
+    pointer-events: none;
+  }
+
+  /* meta */
+  .meta {
+    position: absolute;
+    bottom: 0; left: 0; right: 64px;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .meta .handle {
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .meta .handle::before {
+    content: "@";
+    color: var(--accent);
+  }
+  .meta .caption {
+    font-size: 13px;
+    color: rgba(255,255,255,.85);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.4;
+  }
+  .meta .stats {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: rgba(255,255,255,.6);
+    margin-top: 2px;
+  }
+  .meta .stats span { display: flex; align-items: center; gap: 3px; }
+
+  /* side actions */
+  .actions {
+    position: absolute;
+    bottom: 20px; right: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+  .action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .action-btn .icon-wrap {
+    width: 46px; height: 46px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.12);
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+    transition: transform .12s, background .12s;
+  }
+  .action-btn:active .icon-wrap {
+    transform: scale(.88);
+    background: rgba(255,255,255,.22);
+  }
+  .action-btn.muted-btn .icon-wrap { background: var(--accent); }
+
+  /* play/pause tap target */
+  .tap-zone {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  /* pause indicator */
+  .pause-icon {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%,-50%) scale(0);
+    background: rgba(0,0,0,.55);
+    border-radius: 50%;
+    width: 70px; height: 70px;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    transition: transform .15s, opacity .15s;
+    opacity: 0;
+    z-index: 2;
+  }
+  .pause-icon.show {
+    transform: translate(-50%,-50%) scale(1);
+    opacity: 1;
+  }
+
+  /* ── loader / empty ──────────────────────────────────────────────────────── */
+  #loader, #empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    height: 100%;
+    color: var(--muted);
+    font-size: 15px;
+    text-align: center;
+    padding: 32px;
+  }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid rgba(255,255,255,.1);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── load-more sentinel ──────────────────────────────────────────────────── */
+  #sentinel {
+    scroll-snap-align: none;
+    height: 1px;
+  }
+
+  /* ── reduced-motion ──────────────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- top bar -->
+  <div id="topbar">
+    <div class="top-row">
+      <div id="logo">TikFeed</div>
+      <div id="search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input id="searchInput" type="search" placeholder="Search videos…" autocomplete="off" />
+      </div>
+      <button id="searchBtn">Go</button>
+    </div>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-mode="trending" data-market="us">🇺🇸 Trending US</button>
+      <button class="tab" data-mode="trending" data-market="gb">🇬🇧 UK</button>
+      <button class="tab" data-mode="trending" data-market="jp">🇯🇵 Japan</button>
+      <button class="tab" data-mode="trending" data-market="br">🇧🇷 Brazil</button>
+      <button class="tab" data-mode="trending" data-market="in">🇮🇳 India</button>
+      <button class="tab" data-mode="trending" data-market="kr">🇰🇷 Korea</button>
+    </div>
+  </div>
+
+  <!-- worker URL setup banner -->
+  <div id="workerBanner">
+    <strong>⚡ One-time setup:</strong> paste your Cloudflare Worker URL to enable video proxying
+    <input id="workerInput" type="url" placeholder="https://your-worker.your-name.workers.dev" />
+    <button id="saveWorker">Save & Load</button>
+  </div>
+
+  <!-- feed -->
+  <div id="feed">
+    <div id="loader"><div class="spinner"></div>Loading…</div>
+    <div id="sentinel"></div>
+  </div>
+
+</div>
+
+<script>
+// ── config ───────────────────────────────────────────────────────────────────
+const STORAGE_KEY = "https://soft-darkness-315e.blackberryggames.workers.dev";
+let WORKER = localStorage.getItem(STORAGE_KEY) || "";
+
+// ── DOM refs ─────────────────────────────────────────────────────────────────
+const feed         = document.getElementById("feed");
+const loader       = document.getElementById("loader");
+const sentinel     = document.getElementById("sentinel");
+const workerBanner = document.getElementById("workerBanner");
+const workerInput  = document.getElementById("workerInput");
+const saveWorker   = document.getElementById("saveWorker");
+const searchInput  = document.getElementById("searchInput");
+const searchBtn    = document.getElementById("searchBtn");
+const tabsEl       = document.getElementById("tabs");
+
+// ── state ─────────────────────────────────────────────────────────────────────
+let mode        = "trending";
+let market      = "us";
+let query       = "";
+let pageCursor  = 0;
+let loading     = false;
+let done        = false;
+let globalMuted = true;
+
+// ── worker URL handling ───────────────────────────────────────────────────────
+function applyWorkerUrl(url) {
+  WORKER = url.replace(/\/$/, "");
+  localStorage.setItem(STORAGE_KEY, WORKER);
+  if (WORKER) workerBanner.style.display = "none";
+}
+
+if (WORKER) {
+  workerInput.value = WORKER;
+  workerBanner.style.display = "none";
+}
+
+saveWorker.addEventListener("click", () => {
+  const val = workerInput.value.trim();
+  if (!val) return;
+  applyWorkerUrl(val);
+  resetFeed();
+  loadMore();
+});
+
+// ── URL builders ──────────────────────────────────────────────────────────────
+function proxyVideoUrl(cdnUrl) {
+  if (!WORKER || !cdnUrl) return cdnUrl || "";
+  return `${WORKER}/proxy/video?url=${encodeURIComponent(cdnUrl)}`;
+}
+
+function trendingUrl(mkt) {
+  return `${WORKER}/api/trending?market=${mkt}&max_results=10`;
+}
+
+function searchUrl(q, cursor) {
+  return `${WORKER}/api/search?search_query=${encodeURIComponent(q)}&max_results=10&sort_by=relevance${cursor ? "&page_cursor=" + cursor : ""}`;
+}
+
+// ── data fetching ─────────────────────────────────────────────────────────────
+async function fetchVideos() {
+  if (!WORKER) return [];
+
+  let url;
+  if (mode === "search") {
+    url = searchUrl(query, pageCursor);
+  } else {
+    url = trendingUrl(market);
+  }
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  const data = await res.json();
+
+  // Both trending and search return { videos: [...] }
+  const videos = data.videos || [];
+
+  // Grab next cursor if present
+  if (data.page_cursor !== undefined) {
+    pageCursor = data.page_cursor;
+  } else if (data.next_cursor !== undefined) {
+    pageCursor = data.next_cursor;
+  } else {
+    done = true; // no more pages
+  }
+
+  return videos;
+}
+
+// ── card builder ──────────────────────────────────────────────────────────────
+function fmtNum(n) {
+  if (!n && n !== 0) return "—";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return n;
+}
+
+function buildCard(v) {
+  const mp4   = v.media?.hd_video_url || v.media?.video_url || "";
+  const thumb = v.thumbnails?.cover_url || v.thumbnails?.original_cover_url || "";
+  const src   = proxyVideoUrl(mp4);
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.dataset.src = src;
+
+  // thumb
+  if (thumb) {
+    const t = document.createElement("div");
+    t.className = "thumb";
+    t.style.backgroundImage = `url(${thumb})`;
+    card.appendChild(t);
+  }
+
+  // video element (created lazily when near-visible)
+  const vidSlot = document.createElement("div");
+  vidSlot.className = "vid-slot";
+  card.appendChild(vidSlot);
+
+  // overlay
+  const ov = document.createElement("div");
+  ov.className = "overlay";
+  card.appendChild(ov);
+
+  // pause icon
+  const pi = document.createElement("div");
+  pi.className = "pause-icon";
+  pi.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`;
+  card.appendChild(pi);
+
+  // tap zone
+  const tz = document.createElement("div");
+  tz.className = "tap-zone";
+  tz.addEventListener("click", () => togglePlay(card));
+  card.appendChild(tz);
+
+  // meta
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerHTML = `
+    <div class="handle">${escHtml(v.author?.handle || "")}</div>
+    <div class="caption">${escHtml(v.caption || "")}</div>
+    <div class="stats">
+      <span>❤️ ${fmtNum(v.stats?.likes)}</span>
+      <span>💬 ${fmtNum(v.stats?.comments)}</span>
+      <span>🔁 ${fmtNum(v.stats?.shares)}</span>
+      <span>👁️ ${fmtNum(v.stats?.views)}</span>
+    </div>
+  `;
+  card.appendChild(meta);
+
+  // actions
+  const acts = document.createElement("div");
+  acts.className = "actions";
+  acts.innerHTML = `
+    <div class="action-btn muted-btn" data-role="mute" title="Toggle mute">
+      <div class="icon-wrap">
+        ${muteIcon(globalMuted)}
+      </div>
+      <span>${globalMuted ? "Unmute" : "Mute"}</span>
+    </div>
+    <a class="action-btn" href="https://www.tiktok.com/@${escHtml(v.author?.handle || "")}/" target="_blank" rel="noopener" title="Open on TikTok">
+      <div class="icon-wrap">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+      </div>
+      <span>TikTok</span>
+    </a>
+    <a class="action-btn" href="${src}" download title="Download" target="_blank" rel="noopener">
+      <div class="icon-wrap">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </div>
+      <span>Save</span>
+    </a>
+  `;
+  acts.querySelector("[data-role='mute']").addEventListener("click", () => {
+    globalMuted = !globalMuted;
+    updateAllMute();
+  });
+  card.appendChild(acts);
+
+  return card;
+}
+
+function muteIcon(muted) {
+  if (muted) return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`;
+  return `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+}
+
+function updateAllMute() {
+  document.querySelectorAll("video").forEach(vid => { vid.muted = globalMuted; });
+  document.querySelectorAll("[data-role='mute']").forEach(btn => {
+    btn.querySelector(".icon-wrap").innerHTML = muteIcon(globalMuted);
+    btn.querySelector("span").textContent = globalMuted ? "Unmute" : "Mute";
+    btn.style.background = "";
+    if (!globalMuted) btn.querySelector(".icon-wrap").style.background = "";
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ── video playback ─────────────────────────────────────────────────────────────
+function ensureVideo(card) {
+  const slot = card.querySelector(".vid-slot");
+  if (slot.querySelector("video")) return slot.querySelector("video");
+  const vid = document.createElement("video");
+  vid.src = card.dataset.src;
+  vid.loop = true;
+  vid.muted = globalMuted;
+  vid.playsInline = true;
+  vid.preload = "auto";
+  vid.style.cssText = "width:100%;height:100%;object-fit:cover;display:block;";
+  vid.addEventListener("canplay", () => card.classList.add("playing"));
+  slot.appendChild(vid);
+  return vid;
+}
+
+let currentCard = null;
+
+function playCard(card) {
+  if (!card || !WORKER) return;
+  if (currentCard && currentCard !== card) {
+    const prevVid = currentCard.querySelector("video");
+    if (prevVid) { prevVid.pause(); prevVid.currentTime = 0; }
+    currentCard.classList.remove("playing");
+  }
+  currentCard = card;
+  const vid = ensureVideo(card);
+  vid.play().catch(() => {});
+  card.querySelector(".pause-icon").classList.remove("show");
+}
+
+function togglePlay(card) {
+  const vid = card.querySelector("video");
+  if (!vid) { playCard(card); return; }
+  const pi = card.querySelector(".pause-icon");
+  if (vid.paused) {
+    vid.play().catch(() => {});
+    pi.classList.remove("show");
+  } else {
+    vid.pause();
+    pi.classList.add("show");
+    setTimeout(() => pi.classList.remove("show"), 900);
+  }
+}
+
+// ── intersection observer for autoplay ───────────────────────────────────────
+const cardObserver = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting && e.intersectionRatio > 0.6) {
+      playCard(e.target);
+    }
+  });
+}, { threshold: 0.6 });
+
+// ── sentinel observer for infinite scroll ────────────────────────────────────
+const sentinelObserver = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting && !loading && !done && WORKER) loadMore();
+}, { threshold: 0.1 });
+sentinelObserver.observe(sentinel);
+
+// ── load more ─────────────────────────────────────────────────────────────────
+async function loadMore() {
+  if (loading || done || !WORKER) return;
+  loading = true;
+  loader.style.display = "flex";
+  loader.style.minHeight = "120px";
+
+  try {
+    const videos = await fetchVideos();
+    if (!videos.length) { done = true; return; }
+
+    videos.forEach(v => {
+      const card = buildCard(v);
+      feed.insertBefore(card, sentinel);
+      cardObserver.observe(card);
+    });
+
+    // play first card if feed was empty
+    if (!currentCard) {
+      const first = feed.querySelector(".card");
+      if (first) playCard(first);
+    }
+  } catch (e) {
+    console.error("loadMore error", e);
+    showEmpty(`Failed to load videos: ${e.message}`);
+  } finally {
+    loading = false;
+    loader.style.display = "none";
+  }
+}
+
+// ── reset ─────────────────────────────────────────────────────────────────────
+function resetFeed() {
+  // stop & remove all cards
+  document.querySelectorAll(".card").forEach(c => {
+    const vid = c.querySelector("video");
+    if (vid) { vid.pause(); vid.src = ""; }
+    cardObserver.unobserve(c);
+    c.remove();
+  });
+  currentCard  = null;
+  pageCursor   = 0;
+  done         = false;
+  loading      = false;
+  document.querySelectorAll(".empty-msg").forEach(e => e.remove());
+}
+
+function showEmpty(msg) {
+  const el = document.createElement("div");
+  el.className = "empty-msg";
+  el.style.cssText = "display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted);font-size:14px;text-align:center;padding:24px;";
+  el.textContent = msg;
+  feed.insertBefore(el, sentinel);
+}
+
+// ── tabs ──────────────────────────────────────────────────────────────────────
+tabsEl.addEventListener("click", e => {
+  const tab = e.target.closest(".tab");
+  if (!tab) return;
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  tab.classList.add("active");
+  mode   = tab.dataset.mode;
+  market = tab.dataset.market || "us";
+  query  = "";
+  searchInput.value = "";
+  resetFeed();
+  loadMore();
+});
+
+// ── search ────────────────────────────────────────────────────────────────────
+function doSearch() {
+  const q = searchInput.value.trim();
+  if (!q) return;
+  query = q;
+  mode  = "search";
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  resetFeed();
+  loadMore();
+}
+
+searchBtn.addEventListener("click", doSearch);
+searchInput.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+
+// ── init ──────────────────────────────────────────────────────────────────────
+if (WORKER) {
+  loader.style.display = "flex";
+  loadMore();
+} else {
+  loader.style.display = "none";
+}
+</script>
+</body>
+</html>
